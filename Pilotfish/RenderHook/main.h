@@ -13,11 +13,11 @@
 #include <fstream>
 #include <queue>
 #include <wrl/client.h>
-#pragma comment( lib, "winmm" )
-#include "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.1\\include\\nvml.h"
-#include "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.1\\include\\cuda_runtime.h"
-#pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.1\\lib\\x64\\nvml.lib")
-#pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.1\\lib\\x64\\cudart.lib")
+#pragma comment(lib, "winmm" )
+#include "nvml.h"
+#include "cuda_runtime.h"
+#pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\lib\\x64\\nvml.lib")
+#pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\lib\\x64\\cudart.lib")
 // #include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\include\cuda.h"
 #define PF //  FPS; PF ; SOFT; CSPEED; NAIVE
 #define LOGDIR "D:\\CloudGaming\\Log2\\rdr_rendertime.csv"

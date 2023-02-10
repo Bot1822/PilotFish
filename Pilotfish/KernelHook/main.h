@@ -9,8 +9,8 @@
 #include <stdio.h>
 #include <thread>
 #include <fstream>
-#include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include\cuda.h"
-#include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.1\include\cuda_runtime.h"
+#include "cuda.h"
+#include "cuda_runtime.h"
 #pragma comment( lib, "winmm" )
 #include <string>
 #include <queue>
