@@ -64,8 +64,10 @@ public:
 	~ChildProcess()
 	{
 		WaitForSingleObject(pi.hProcess, INFINITE);
-		CloseHandle(pi.hProcess);
+		MessageBoxA(NULL, "Exit Children Process", "Exit", 3);
 		CloseHandle(pi.hThread);
+		CloseHandle(pi.hProcess);
+
 	}
 };
 
@@ -116,25 +118,38 @@ inline FARPROC getLoadLibraryAddress()
 
 void injectWithRemoteThread(PROCESS_INFORMATION& pi, const char* dllPath)
 {
-	cout << "Allocating Remote Memory For dll path" << endl;
+	cout << "Allocating Memory in Child Process For dll path" << endl;
+	//计算DLL路径名需要的内存空间
 	const int bufferSize = strlen(dllPath) + 1;
+	//使用VirtualAllocEx函数在Childprocess的内存地址空间分配DLL文件名缓冲区
 	VirtualMemory dllPathMemory(pi.hProcess, bufferSize, PAGE_READWRITE);
+	//使用WriteProcessMemory函数将DLL的路径名复制到Childprocess的内存空间
 	dllPathMemory.copyFromBuffer(dllPath, bufferSize);
+	cout << "Have written dll path to child process`s Virtual memory!" << endl;
+	/*	LoadLibrary载入指定的动态链接库，并将它映射到当前进程使用的地址空间。一旦载入，即可访问库内保存的资源。
+		GetProcAddress功能是检索指定的动态链接库(DLL)中的输出库函数地址。lpProcName参数能够识别DLL中的函数。
+		CreateRemoteThread是一个Windows API函数，它能够创建一个在其它进程地址空间中运行的线程(也称:创建远程线程)。
+		LoadLibraryA这个函数是在Kernel32.dll这个核心DLL里的，而这个DLL很特殊，不管对于哪个进程，Windows总是把它加载到相同的地址上去。
+		因此你的进程中LoadLibraryA的地址和目标进程中LoadLibraryA的地址是相同的(其实，这个DLL里的所有函数都是如此)。至此，DLL注入结束了。
+		*/
+	cout << "Getting LoadLibraryA address" << endl;
 	PTHREAD_START_ROUTINE startRoutine = (PTHREAD_START_ROUTINE)getLoadLibraryAddress();
+	std::cout << "startRoutine: " << startRoutine << std::endl;
 
 	cout << "Creating remote thread" << endl;
 	HANDLE remoteThreadHandle = CreateRemoteThread(
 		pi.hProcess, NULL, NULL, startRoutine, dllPathMemory.getAddress(), CREATE_SUSPENDED, NULL);
 	if (remoteThreadHandle == NULL) {
 		cout << "Failed to create remote thread!" << endl;
+		return;
 	}
 
-	cout << "Resume remote thread" << endl;
+	cout << "Resume remote thread to inject DLL" << endl;
 	ResumeThread(remoteThreadHandle);
 	WaitForSingleObject(remoteThreadHandle, INFINITE);
 	CloseHandle(remoteThreadHandle);
 
-	cout << "Resume main thread" << endl;
+	cout << "Resume Children Process`s main thread" << endl;
 	ResumeThread(pi.hThread);
 }
 
@@ -148,6 +163,7 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
+	// 启动训练文件？
 	char cmd[1024];
 	sprintf_s(cmd, "%s%s%s", argv[1], " ", argv[2]);
 	//cout << cmd << endl;
@@ -157,9 +173,14 @@ int main(int argc, char* argv[])
 		MessageBoxA(0, "参数数量不正确", "error", 1);
 		return 1;
 	}
+	std::cout << "Creating child process" << std::endl;
 	ChildProcess process(cmd, argv[3], CREATE_SUSPENDED);
-	//ChildProcess process(command, dir, CREATE_SUSPENDED);
+	std::cout << "Child process created with PID: " << process.getProcessInformation().dwProcessId << std::endl;
+	std::cout << "Child process has been suspended" << std::endl;
+
+	std::cout << "Injecting dll into child process" << std::endl;
 	injectWithRemoteThread(process.getProcessInformation(), argv[4]);
+	std::cout << "Successfully injected dll into child process" << std::endl;
 	//injectWithRemoteThread(process.getProcessInformation(), "D:\\github\\Pilotfish\\Pilotfish\\KernelHook\\x64\\Debug\\KernelHook.dll");
 	//injectWithRemoteThread(process.getProcessInformation(), "E:\\CloudGaming\\Pilotfish单机\\KernelHook\\x64\\Debug\\KernelHook.dll");
 	//injectWithRemoteThread(process.getProcessInformation(), "E:\\CloudGaming\\Pilotfish单机\\exe\\KernelHook_profile_full.dll");

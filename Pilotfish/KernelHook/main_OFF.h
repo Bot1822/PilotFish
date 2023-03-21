@@ -22,6 +22,7 @@ map<CUfunction, double> kernel_time;
 map<string, double> kernel_offline;
 
 //CUresult CUDAAPI cuLaunchKernel
+// 定义两个函数指针类型
 typedef CUresult(CUDAAPI* cuLaunchKernelt)(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra);
 cuLaunchKernelt ocuLaunchKernel = NULL;
 cuLaunchKernelt cuLaunchKerneladdr;
@@ -47,6 +48,7 @@ void get_kernel_time(map<string, double>& kernel_list)
 //offline
 CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra)
 {
+	hook_log << "hook!!!:" << f << endl;
 	if (kernel_num.find(f) != kernel_num.end())
 	{
 		kernel_num.find(f)->second += 1;
@@ -132,6 +134,7 @@ FARPROC getLibraryProcAddress(LPCSTR libName, LPCSTR procName)
 
 BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 {
+	// 不需要线程级的消息，将其禁用，减少应用程序的工作集空间
 	DisableThreadLibraryCalls(hInstance);
 
 	switch (fdwReason)
@@ -139,6 +142,8 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 	case DLL_PROCESS_ATTACH:
 		timeBeginPeriod(1);
 
+		cout << "DLL_PROCESS_ATTACH!!!!!!!!!!!!!!!!!!!" << endl;
+		// 创建一些文件句柄以保存运行信息
 		hook_log.open("D:\\CloudGaming\\Log\\hook_log.txt");
 		debug_log.open("D:\\CloudGaming\\Log\\debug_log.txt");
 		kernel_log.open("D:\\CloudGaming\\Log\\kernel_log.txt");
@@ -147,18 +152,29 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		kernel_avetime.open(KERNELAVG2);
 
 		//get_kernel_time(kernel_offline);
-
+		// 若文件创建成功则弹出消息窗口"DLL injected"
 		if (hook_log)MessageBoxA(0, "DLL injected", "step 4", 3);
 		hook_log << "dll inject" << endl;
+
 		DisableThreadLibraryCalls(hInstance);
 		GetModuleFileNameA(hInstance, dlldir, 512);
-		for (size_t i = strlen(dlldir); i > 0; i--) { if (dlldir[i] == '\\') { dlldir[i + 1] = 0; break; } }
+		for (size_t i = strlen(dlldir); i > 0; i--) {
+			if (dlldir[i] == '\\') { 
+				dlldir[i + 1] = 0; break; 
+			} 
+		}
 		cuLaunchKerneladdr = (cuLaunchKernelt)getLibraryProcAddress("nvcuda.dll", "cuLaunchKernel");
 		cuModuleGetFunctionaddr = (cuModuleGetFunctiont)getLibraryProcAddress("nvcuda.dll", "cuModuleGetFunction");
 		hook_log << "culaucnkernel addr " << cuLaunchKerneladdr << endl;
 		hook_log << "cuModuleGetFunction addr" << cuModuleGetFunctionaddr << endl;
 
 		if (MH_Initialize() != MH_OK) hook_log << "initialize hook failed" << endl; else hook_log << "initialize hook sucess" << endl;
+
+		// 创建一个目标函数的钩子
+		// Parameters:
+		//   pTarget     [in]  指向原函数（目标函数）的指针
+		//   pDetour     [in]  指向用来替代目标函数的函数指针
+		//   ppOriginal  [out] 指向调用原函数入口的指针，此参数可为NULL   
 		if (MH_CreateHook((LPVOID)cuLaunchKerneladdr, hkcuLaunchKernel, (LPVOID*)& ocuLaunchKernel) != MH_OK) hook_log << "create cuLaunchKernel failed" << endl;
 		else hook_log << "create cuLaunchKernel success" << endl;
 		if (MH_CreateHook((LPVOID)cuModuleGetFunctionaddr, hkcuModuleGetFunction, (LPVOID*)& ocuModuleGetFunction) != MH_OK) hook_log << "create cuModuleGetFunction failed" << endl;
@@ -172,10 +188,12 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		break;
 	case DLL_PROCESS_DETACH: // A process unloads the DLL.
 		timeEndPeriod(1);
-
+		cout << "DLL_PROCESS_DETACH!!!!!!!!!!!!!!!!!!!" << endl;
 		//kernel num
 		map<CUfunction, int>::iterator i;
 		i = kernel_num.begin();
+		if (kernel_num.size() == 0)
+			kernel_log << "Can`t detect any kernel!!!!!!!!!" << endl;
 		map<CUfunction, string> ::iterator j;
 		while (i != kernel_num.end())
 		{
@@ -189,6 +207,8 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		//kernel time
 		map<CUfunction, float>::iterator k;
 		k = kernel_totaltime.begin();
+		if (kernel_totaltime.size() == 0)
+			kernel_avetime << "Can`t detect any kernel!!!!!!!!!" << endl;
 		while (k != kernel_totaltime.end())
 		{
 			if (kernel_function.find(k->first) != kernel_function.end() && kernel_num.find(k->first) != kernel_num.end())

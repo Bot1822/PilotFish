@@ -25,6 +25,10 @@
 #ifdef NAIVE
 #include "main_NAIVE.h"
 #endif
+#ifdef TEST1
+#include "main_test1.h"
+#endif // TEST1
+
 using namespace std;
 
 //=========================================================================================================================//

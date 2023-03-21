@@ -11,10 +11,11 @@
 #include <fstream>
 #include "cuda.h"
 #include "cuda_runtime.h"
+#include <cudaTypedefs.h>
 #pragma comment( lib, "winmm" )
 #include <string>
 #include <queue>
-#define PF // OFF; FULL; FPS; PF ; SOFT; CSPEED; NAIVE
+#define TEST1 // OFF; FULL; FPS; PF ; SOFT; CSPEED; NAIVE
 #define KERNELAVG1 "D:\\CloudGaming\\OfflineData\\kernel_avetime.txt"
 #define KERNELAVG2 "D:\\CloudGaming\\Log\\kernel_avetime.txt"
 #define TESTLOGDIR "D:\\CloudGaming\\Log\\kernel_test.txt"
