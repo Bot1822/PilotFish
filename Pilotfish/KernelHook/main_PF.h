@@ -2,6 +2,14 @@
 #include <map>
 #include <iostream>
 #include <process.h>
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <windows.h>
+#include <vector>
+#include <queue>
+#include <fstream>
+#include <string>
+#include "MinHook.h"
 
 using namespace std;
 
@@ -9,7 +17,6 @@ ofstream hook_log;
 ofstream debug_log;
 ofstream kernel_log;
 ofstream kernel_unhooked_log;
-ofstream kernel_unregistered_log;
 ofstream kernel_avetime;
 int getfunction_count = 0;
 double timeslice = 10;
@@ -121,6 +128,7 @@ struct Queryparam
 queue<Queryparam*> kernelrecordqueue;
 DWORD WINAPI flip_detection(LPVOID lpParam);
 
+// 用于判断是否需要进行时间片切换
 bool get_time_status()
 {
 	//read the status
@@ -132,13 +140,19 @@ bool get_time_status()
 	return false;
 }
 
+// 读取时间片
 double read_timeslice()
 {
 	strcpy(timeB, (char*)timeBuffer);
 	return atof(string(timeB).c_str());
 }
 
-
+/**
+ * @brief 用于判断GPU是否忙碌，如果忙碌则重置GPU，清除所有资源
+ * 
+ * @return true 
+ * @return false 
+ */
 bool is_gpu_busy()
 {
 	strcpy(busyB, (char*)busyBuffer);
@@ -175,31 +189,38 @@ void get_kernel_time(map<string, double>& kernel_list)
 void setkernellaunchnum(int num)
 {
 	kernellaunchnumData = to_string(num);
-	strcpy((char*)kernellaunchnumBuffer, kernellaunchnumData.c_str());//д������
+	strcpy((char*)kernellaunchnumBuffer, kernellaunchnumData.c_str());//д������
 	return;
 }
 
 void setkernellaunchtime(float time)
 {
 	kernellaunchtimeData = to_string(time);
-	strcpy((char*)kernellaunchtimeBuffer, kernellaunchtimeData.c_str());//д������
+	strcpy((char*)kernellaunchtimeBuffer, kernellaunchtimeData.c_str());//д������
 	return;
 }
 
 void setkernelremainnum(int num)
 {
 	kernelremainnumData = to_string(num);
-	strcpy((char*)kernelremainnumBuffer, kernelremainnumData.c_str());//д������
+	strcpy((char*)kernelremainnumBuffer, kernelremainnumData.c_str());//д������
 	return;
 }
 
 void setkernelremaintime(float time)
 {
 	kernelremaintimeData = to_string(time);
-	strcpy((char*)kernelremaintimeBuffer, kernelremaintimeData.c_str());//д������
+	strcpy((char*)kernelremaintimeBuffer, kernelremaintimeData.c_str());//д������
 	return;
 }
 
+/**
+ * @brief 用于判断是否可以启动新的kernel，如果可以则返回false??????
+ * 
+ * @param cur_time 
+ * @return true not available
+ * @return false available
+ */
 bool launch_available(double cur_time)
 {
 	AcquireSRWLockShared(&time_lock);
@@ -210,6 +231,12 @@ bool launch_available(double cur_time)
 	return flag;
 }
 
+/**
+ * @brief 检测器，GPU忙碌时重置，还可以释放已经完成的kernel？
+ * 
+ * @param lpParam 
+ * @return DWORD 
+ */
 DWORD WINAPI flip_detection(LPVOID lpParam)
 {
 	float duration = 0;
@@ -217,11 +244,14 @@ DWORD WINAPI flip_detection(LPVOID lpParam)
 	while (true)
 	{
 		/*strcpy(flipB, (char*)flipBuffer);*/
+		// 判断gpu是否忙碌
 		AcquireSRWLockExclusive(&busy_lock);
 		is_gpu_busy();
 		ReleaseSRWLockExclusive(&busy_lock);
+		// 判断是否需要进行时间片切换
 		if (time_update_flag != get_time_status())
 		{
+			// 重置时间片
 			if (train_status == 1)
 			{
 				CopyHtoD();
@@ -242,6 +272,7 @@ DWORD WINAPI flip_detection(LPVOID lpParam)
 			//kernel_slice_count = 0;
 			ReleaseSRWLockExclusive(&time_lock);
 			cudaError_t ret2;
+			// 释放已经完成的kernel
 			while (!kernelrecordqueue.empty())
 			{
 				Queryparam* a = kernelrecordqueue.front();
@@ -294,7 +325,7 @@ int init_mempool()
 
 	for (iter = vmem_map.begin(); iter != vmem_map.end(); iter++)
 	{
-		//����ҳ�����ڴ�
+		//����ҳ�����ڴ�
 		//Sleep(5000);
 		//a = (void*)malloc(test_cumems);
 		void* a;
@@ -331,6 +362,11 @@ int init_mempool()
 	return 0;
 }
 
+/**
+ * @brief 从GPU拷贝数据到内存
+ * 
+ * @return int 
+ */
 int CopyDtoH()
 {
 	LARGE_INTEGER HookBeginStamp;
@@ -429,10 +465,10 @@ int CopyDtoH()
 		void* a = mem_vmem_map.find(cumemptr)->second;
 		addr_s += cumems;
 		QueryPerformanceCounter(&HookBeginStamp);
-		mempoolBuffer = ::MapViewOfFile(mempoolMap, FILE_MAP_ALL_ACCESS, addr_s, addr_s + cumems, MAP_SIZE);//�õ��빲���ڴ�ӳ���ָ��
+		mempoolBuffer = ::MapViewOfFile(mempoolMap, FILE_MAP_ALL_ACCESS, addr_s, addr_s + cumems, MAP_SIZE);//�õ��빲���ڴ�ӳ���ָ��
 
 		//string mempoolData = "1";
-		strcpy((char*)mempoolBuffer, reinterpret_cast<char*>(a));//д������
+		strcpy((char*)mempoolBuffer, reinterpret_cast<char*>(a));//д������
 		i++;
 	}
 	for (int i = 0; i < vmem_map.size(); i++)
@@ -447,6 +483,12 @@ int CopyDtoH()
 	//Sleep(4000);
 	return 0;
 }
+
+/**
+ * @brief 从内存拷贝到显存
+ * 
+ * @return int 
+ */
 int CopyHtoD()
 {
 	LARGE_INTEGER HookBeginStamp;
@@ -525,7 +567,7 @@ int CopyHtoD()
 	//	}
 	//	void* a = iter2->second;
 
-	//	//free�ڴ�
+	//	//free�ڴ�
 	//	cuStatus = cuMemFreeHost(a);
 	//	if (cuStatus != CUDA_SUCCESS)
 	//	{
@@ -584,7 +626,7 @@ CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned 
 
 	while (launch_available(cur_time))
 	{
-		Sleep(2);
+		Sleep(2); // 粗暴的睡2ms？这好吗？这不好
 	}
 	AcquireSRWLockExclusive(&time_lock);
 	timeslice -= cur_time;
@@ -712,9 +754,12 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 	{
 	case DLL_PROCESS_ATTACH:
 		timeBeginPeriod(1);
+		// 初始化两个锁, 用于保护全局变量，防止多线程访问时出现问题，这里使用了SRWLock，比较高效, 但是只能在Windows Vista及以上版本使用，如果要兼容XP，可以使用CRITICAL_SECTION
 		InitializeSRWLock(&time_lock);
 		InitializeSRWLock(&busy_lock);
-		flipMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"flip");// ���ж�Ҫ�򿪵Ĺ����ڴ������Ƿ����
+		// 打开7个共享内存，用于存储时间戳和busy状态，这里使用了共享内存，而不是使用全局变量，是为了防止多个进程同时访问时出现问题
+		// 这7个共享内存在RenderHook中创建，这里只是打开
+		flipMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"flip");
 		timeMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"time");
 		busyMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"busy");
 		kernellaunchnumMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"kernellaunchnum");
@@ -722,7 +767,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		kernelremainnumMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"kernelremainnum");
 		kernelremaintimeMap = OpenFileMapping(FILE_MAP_ALL_ACCESS, 0, L"kernelremaintime");
 
-
+		// 将共享内存映射到本进程的地址空间
 		flipBuffer = MapViewOfFile(flipMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
 		timeBuffer = MapViewOfFile(timeMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
 		busyBuffer = MapViewOfFile(busyMap, FILE_MAP_ALL_ACCESS, 0, 0, 0);
@@ -735,12 +780,13 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		debug_log.open("D:\\CloudGaming\\Log\\debug_log.txt");
 		kernel_log.open("D:\\CloudGaming\\Log\\kernel_log.txt");
 		kernel_unhooked_log.open("D:\\CloudGaming\\Log\\kernel_unhooked_log.txt");
-		kernel_unregistered_log.open("D:\\CloudGaming\\Log\\kernel_unregistered_log.txt");
 		kernel_avetime.open(KERNELAVG2);
 
 		get_kernel_time(kernel_offline);
+		// 创建一个线程，监控kernel
 		CreateThread(NULL, NULL, flip_detection, NULL, 0, NULL);
 
+		// 创建四个钩子，分别钩住cuLaunchKernel、cuModuleGetFunction、cuMemAlloc、cuMemFree
 		if (hook_log)MessageBoxA(0, "DLL injected", "step 4", 3);
 		hook_log << "dll inject" << endl;
 		DisableThreadLibraryCalls(hInstance);

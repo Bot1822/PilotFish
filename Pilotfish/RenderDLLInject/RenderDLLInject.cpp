@@ -129,10 +129,12 @@ void injectWithRemoteThread(HANDLE& pi, const char* dllPath)
 		printf("Failed to create remote thread!");
 	}
 
+	MessageBoxA(NULL, "Press OK to resume romote thread/Load DLL", "Resume Thread", MB_OK);
 	printf("Resume remote thread");
 	ResumeThread(remoteThreadHandle);
 	WaitForSingleObject(remoteThreadHandle, INFINITE);
 	CloseHandle(remoteThreadHandle);
+	MessageBoxA(NULL, "Already Injected", "Injected", MB_OK);
 
 	//printf("Resume main thread");
 	//ResumeThread(pi.hThread);
@@ -188,15 +190,19 @@ int main(int argc, char* argv[])
 	//const char* szProcessName = "RDR2.exe";
 	//const char* szProcessName = "HITMAN3.exe";
 	//const char* szProcessName = "DIRT5.exe";
-	const char* szProcessName = "SOTTR.exe";
+	// const char* szProcessName = "SOTTR.exe";
 	//const char* szProcessName = "TheDivision.exe";
 	//const char* szProcessName = "F1_2021.exe";
 	//const char* szProcessName = "CivilizationV_DX11.exe";
 	//const char* szProcessName = "TslGame.exe";
+	const char* szProcessName = "witcher3.exe";
 
 	//Sleep(5000);
+	DWORD dwProcessID = GetProcessIDByName(szProcessName);
+	cout << "Process ID: " << dwProcessID << endl;
+	// cout << "Process Name: " << szProcessName << endl;
 	HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, GetProcessIDByName(szProcessName));
 	//HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, 19752);
-	injectWithRemoteThread(hProcess, "D:\\github\\Pilotfish\\Pilotfish\\RenderHook\\x64\\Debug\\RenderHook.dll");
+	injectWithRemoteThread(hProcess, "D:\\work_spaces\\GPU_Scheduler\\PilotFish\\Pilotfish\\RenderHook\\x64\\Debug\\RenderHook.dll");
 	return 0;
 }

@@ -2,6 +2,11 @@
 #include <map>
 #include <iostream>
 #include <process.h>
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <fstream>
+#include <windows.h>
+#include "Minhook/include/Minhook.h"
 
 using std::ofstream;
 using std::map;
@@ -11,35 +16,35 @@ using std::endl;
 using std::ifstream;
 using std::pair;
 
-ofstream hook_log; // hookÈÕÖ¾
-ofstream debug_log; // debugÈÕÖ¾
-ofstream kernel_log; // kernelÈÕÖ¾
-ofstream kernel_unhooked_log; // kernelÎ´hookÈÕÖ¾
-ofstream kernel_avetime; // kernelÆ½¾ùÊ±¼äÈÕÖ¾
-int kernel_count = 0; // kernel¼ÆÊı£¬È«¾Ö±äÁ¿
-map<CUfunction, string> kernel_function; // kernel¶ÔÓ¦µÄº¯ÊıÃû
-map<CUfunction, int> kernel_num; // kernel¼ÆÊı
-map<CUfunction, int> kernel_unhooked; // kernelÎ´hook¼ÆÊı
-map<CUfunction, string> kernel_unregistered; // kernelÎ´×¢²á¼ÆÊı
-map<CUfunction, float> kernel_totaltime; // kernel×ÜÊ±¼ä
-map<CUfunction, int> kernel_app; // kernelËùÊôapp
-map<CUfunction, double> kernel_time; // kernelÊ±¼ä
-map<string, double> kernel_offline; // kernelÀëÏßÊ±¼ä
+ofstream hook_log; // hookæ—¥å¿—
+ofstream debug_log; // debugæ—¥å¿—
+ofstream kernel_log; // kernelæ—¥å¿—
+ofstream kernel_unhooked_log; // kernelæœªhookæ—¥å¿—
+ofstream kernel_avetime; // kernelå¹³å‡æ—¶é—´æ—¥å¿—
+int kernel_count = 0; // kernelè®¡æ•°ï¼Œå…¨å±€å˜é‡
+map<CUfunction, string> kernel_function; // kernelå¯¹åº”çš„å‡½æ•°å
+map<CUfunction, int> kernel_num; // kernelè®¡æ•°
+map<CUfunction, int> kernel_unhooked; // kernelæœªhookè®¡æ•°
+map<CUfunction, string> kernel_unregistered; // kernelæœªæ³¨å†Œè®¡æ•°
+map<CUfunction, float> kernel_totaltime; // kernelæ€»æ—¶é—´
+map<CUfunction, int> kernel_app; // kernelæ‰€å±app
+map<CUfunction, double> kernel_time; // kernelæ—¶é—´
+map<string, double> kernel_offline; // kernelç¦»çº¿æ—¶é—´
 
-// ¶¨ÒåÒ»¸öº¯ÊıÖ¸ÕëÀàĞÍcudaLaunchKernelt£¬²ÎÊıÀàĞÍÓëcudaLaunchKernelÒ»ÖÂ
+// å®šä¹‰ä¸€ä¸ªå‡½æ•°æŒ‡é’ˆç±»å‹cudaLaunchKerneltï¼Œå‚æ•°ç±»å‹ä¸cudaLaunchKernelä¸€è‡´
 typedef cudaError_t(CUDAAPI* cudaLaunchKernelt)(const void* func, dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream);
-// ¶¨ÒåÒ»¸öº¯ÊıÖ¸ÕëocudaLaunchKernel£¬ÀàĞÍÎªcudaLaunchKernelt
-cudaLaunchKernelt ocudaLaunchKernel = NULL; // ocudaLaunchKernelÓÃÓÚ´æÔ­Ê¼µÄcudaLaunchKernelº¯Êı
-cudaLaunchKernelt cudaLaunchKerneladdr; // cudaLaunchKerneladdrÓÃÓÚ´æcudaLaunchKernelº¯ÊıµÄµØÖ·
+// å®šä¹‰ä¸€ä¸ªå‡½æ•°æŒ‡é’ˆocudaLaunchKernelï¼Œç±»å‹ä¸ºcudaLaunchKernelt
+cudaLaunchKernelt ocudaLaunchKernel = NULL; // ocudaLaunchKernelç”¨äºå­˜åŸå§‹çš„cudaLaunchKernelå‡½æ•°
+cudaLaunchKernelt cudaLaunchKerneladdr; // cudaLaunchKerneladdrç”¨äºå­˜cudaLaunchKernelå‡½æ•°çš„åœ°å€
 
-// ¶¨ÒåÒ»¸öº¯ÊıÖ¸ÕëÀàĞÍcuGetProcAddresst£¬²ÎÊıÀàĞÍÓëcuGetProcAddressÒ»ÖÂ
+// å®šä¹‰ä¸€ä¸ªå‡½æ•°æŒ‡é’ˆç±»å‹cuGetProcAddresstï¼Œå‚æ•°ç±»å‹ä¸cuGetProcAddressä¸€è‡´
 typedef CUresult(CUDAAPI* cuGetProcAddresst) ( const char* symbol, void** pfn, int  cudaVersion, cuuint64_t flags);
-// ¶¨ÒåÒ»¸öº¯ÊıÖ¸ÕëocuGetProcAddress£¬ÀàĞÍÎªcuGetProcAddresst
-cuGetProcAddresst ocuGetProcAddress = NULL; // ocuGetProcAddressÓÃÓÚ´æÔ­Ê¼µÄcuGetProcAddressº¯Êı
-cuGetProcAddresst cuGetProcAddressaddr; // cuGetProcAddressaddrÓÃÓÚ´æcuGetProcAddressº¯ÊıµÄµØÖ·
+// å®šä¹‰ä¸€ä¸ªå‡½æ•°æŒ‡é’ˆocuGetProcAddressï¼Œç±»å‹ä¸ºcuGetProcAddresst
+cuGetProcAddresst ocuGetProcAddress = NULL; // ocuGetProcAddressç”¨äºå­˜åŸå§‹çš„cuGetProcAddresså‡½æ•°
+cuGetProcAddresst cuGetProcAddressaddr; // cuGetProcAddressaddrç”¨äºå­˜cuGetProcAddresså‡½æ•°çš„åœ°å€
 
 //CUresult CUDAAPI cuLaunchKernel
-// ¶¨ÒåÁ½¸öº¯ÊıÖ¸ÕëÀàĞÍ
+// å®šä¹‰ä¸¤ä¸ªå‡½æ•°æŒ‡é’ˆç±»å‹
 typedef CUresult(CUDAAPI* cuLaunchKernelt)(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra);
 cuLaunchKernelt ocuLaunchKernel = NULL;
 cuLaunchKernelt cuLaunchKerneladdr;
@@ -48,25 +53,25 @@ typedef CUresult(CUDAAPI* cuModuleGetFunctiont)(CUfunction* hfunc, CUmodule hmod
 cuModuleGetFunctiont ocuModuleGetFunction = NULL;
 cuModuleGetFunctiont cuModuleGetFunctionaddr;
 
-// ÓÃÓÚhookµÄcudaLaunchKernelº¯Êı
+// ç”¨äºhookçš„cudaLaunchKernelå‡½æ•°
 cudaError_t CUDAAPI hkcudaLaunchKernel(const void* func, 
 	dim3 gridDim, dim3 blockDim, void** args, size_t sharedMem, cudaStream_t stream)
 {
 	MessageBoxA(NULL, "hook!!! In cudaLaunchKernel", "hook!!! In cudaLaunchKernel", 3);
 	hook_log << "hook!!! In cudaLaunchKernel" << endl;
 
-	// ÅĞ¶ÏÊÇ·ñÒÑ¾­hook£¬Èç¹ûÒÑ¾­hook£¬Ôò¼ÆÊı¼Ó1
+	// åˆ¤æ–­æ˜¯å¦å·²ç»hookï¼Œå¦‚æœå·²ç»hookï¼Œåˆ™è®¡æ•°åŠ 1
 	if (kernel_num.find((CUfunction)func) != kernel_num.end())
 	{
 		kernel_num.find((CUfunction)func)->second += 1;
 	}
-	// Èç¹ûÎ´hook£¬¼ÓÈëkernel_num
+	// å¦‚æœæœªhookï¼ŒåŠ å…¥kernel_num
 	else
 	{
 		kernel_num.insert(pair<CUfunction, int>((CUfunction)func, 1));
 	}
 
-	// ¼ÆËãkernelÊ±¼ä
+	// è®¡ç®—kernelæ—¶é—´
 	cudaEvent_t start, end;
 	cudaEventCreate(&start);
 	cudaEventCreate(&end);
@@ -79,7 +84,7 @@ cudaError_t CUDAAPI hkcudaLaunchKernel(const void* func,
 	cudaEventDestroy(start);
 	cudaEventDestroy(end);
 
-	// ¼ÆËãkernel×ÜÊ±¼ä
+	// è®¡ç®—kernelæ€»æ—¶é—´
 	if (kernel_totaltime.find((CUfunction)func) != kernel_totaltime.end())
 	{
 		kernel_totaltime.find((CUfunction)func)->second += time;
@@ -92,19 +97,19 @@ cudaError_t CUDAAPI hkcudaLaunchKernel(const void* func,
 	return ret;
 }
 
-// ÓÃÓÚhookµÄcuGetProcAddressº¯Êı
+// ç”¨äºhookçš„cuGetProcAddresså‡½æ•°
 CUresult CUDAAPI hkcuGetProcAddress(const char* symbol, void** pfn, int  cudaVersion, cuuint64_t flags)
 {
-	// // ÅĞ¶ÏÊÇ·ñÊÇcuLaunchKernelº¯Êı
+	// // åˆ¤æ–­æ˜¯å¦æ˜¯cuLaunchKernelå‡½æ•°
 	// else if (strcmp(symbol, "cuLaunchKernel") == 0)
 	// {
-	// 	// »ñÈ¡cuLaunchKernelº¯ÊıµÄµØÖ·
+	// 	// è·å–cuLaunchKernelå‡½æ•°çš„åœ°å€
 	// 	cuLaunchKerneladdr = (cuLaunchKernelt)ocuGetProcAddress(symbol, pfn, cudaVersion, flags, symbolStatus);
-	// 	// ½«cuLaunchKernelº¯ÊıµÄµØÖ·¸³Öµ¸øocuLaunchKernel
+	// 	// å°†cuLaunchKernelå‡½æ•°çš„åœ°å€èµ‹å€¼ç»™ocuLaunchKernel
 	// 	ocuLaunchKernel = cuLaunchKerneladdr;
-	// 	// ½«hkcudaLaunchKernelº¯ÊıµÄµØÖ·¸³Öµ¸øcuLaunchKerneladdr
+	// 	// å°†hkcudaLaunchKernelå‡½æ•°çš„åœ°å€èµ‹å€¼ç»™cuLaunchKerneladdr
 	// 	cuLaunchKerneladdr = hkcudaLaunchKernel;
-	// 	// ½«cuLaunchKerneladdr¸³Öµ¸øpfn
+	// 	// å°†cuLaunchKerneladdrèµ‹å€¼ç»™pfn
 	// 	*pfn = cuLaunchKerneladdr;
 	// }
 	hook_log << "hook!!! In cuGetProcAddress" << endl;
@@ -114,17 +119,17 @@ CUresult CUDAAPI hkcuGetProcAddress(const char* symbol, void** pfn, int  cudaVer
 }
 
 /**
- * @brief ÓÃÓÚhookµÄcuLaunchKernelº¯Êı
+ * @brief ç”¨äºhookçš„cuLaunchKernelå‡½æ•°
  *
  */
 CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra)
 {
-	// ÅĞ¶ÏÊÇ·ñÒÑ¾­hook£¬Èç¹ûÒÑ¾­hook£¬Ôò¼ÆÊı¼Ó1
+	// åˆ¤æ–­æ˜¯å¦å·²ç»hookï¼Œå¦‚æœå·²ç»hookï¼Œåˆ™è®¡æ•°åŠ 1
 	if (kernel_num.find(f) != kernel_num.end())
 	{
 		kernel_num.find(f)->second += 1;
 	}
-	// Èç¹ûÎ´hook£¬²éÎ´hook¶ÓÁĞ£¬Èç¹ûÎ´hook¶ÓÁĞÖĞ´æÔÚ£¬Ôò¼ÆÊı¼Ó1£¬·ñÔò¼ÆÊıÎª1
+	// å¦‚æœæœªhookï¼ŒæŸ¥æœªhooké˜Ÿåˆ—ï¼Œå¦‚æœæœªhooké˜Ÿåˆ—ä¸­å­˜åœ¨ï¼Œåˆ™è®¡æ•°åŠ 1ï¼Œå¦åˆ™è®¡æ•°ä¸º1
 	else
 	{
 		if (kernel_unhooked.find(f) != kernel_unhooked.end())
@@ -144,7 +149,7 @@ CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned 
 			kernel_unregistered.insert(pair<CUfunction, string>(f, kernel_function.find(f)->second));
 	}*/
 
-	// ¶¨ÒåÁ½¸öcudaEvent_tÀàĞÍµÄ±äÁ¿£¬ÓÃÓÚ¼ÆËãkernelÖ´ĞĞÊ±¼ä
+	// å®šä¹‰ä¸¤ä¸ªcudaEvent_tç±»å‹çš„å˜é‡ï¼Œç”¨äºè®¡ç®—kernelæ‰§è¡Œæ—¶é—´
 	cudaEvent_t start, stop;
 	float elapsedTime;
 
@@ -154,7 +159,7 @@ CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned 
 	//Do kernel activity here
 	CUresult ret = ocuLaunchKernel(f, gridDimX, gridDimY, gridDimZ, blockDimX, blockDimY, blockDimZ, sharedMemBytes, hStream, kernelParams, extra);
 
-	// ¼ÆËãkernel
+	// è®¡ç®—kernel
 	cudaEventCreate(&stop);
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
@@ -205,7 +210,7 @@ FARPROC getLibraryProcAddress(LPCSTR libName, LPCSTR procName)
 }
 
 //=========================================================================================================================//
-// DllÈë¿Ú£¬²ÎÊıÎªDLLµÄ¾ä±ú£¬DLLµÄ¼ÓÔØÔ­Òò£¬ÒÔ¼°DLLµÄ¼ÓÔØ²ÎÊı
+// Dllå…¥å£ï¼Œå‚æ•°ä¸ºDLLçš„å¥æŸ„ï¼ŒDLLçš„åŠ è½½åŸå› ï¼Œä»¥åŠDLLçš„åŠ è½½å‚æ•°
 BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 {
 	DisableThreadLibraryCalls(hInstance);
@@ -225,17 +230,17 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 
 		if (hook_log)MessageBoxA(0, "TEST1 DLL injected", "step 4", 3);
 		hook_log << "Test1 dll inject" << endl;
-		// ½ûÖ¹Ïß³Ì¿âµ÷ÓÃ
+		// ç¦æ­¢çº¿ç¨‹åº“è°ƒç”¨
 		DisableThreadLibraryCalls(hInstance);
 
-		// »ñÈ¡DLLµÄÂ·¾¶£¬²ÎÊıÎªDLLµÄ¾ä±ú£¬´æ·ÅÂ·¾¶µÄ»º³åÇø£¬»º³åÇø´óĞ¡
+		// è·å–DLLçš„è·¯å¾„ï¼Œå‚æ•°ä¸ºDLLçš„å¥æŸ„ï¼Œå­˜æ”¾è·¯å¾„çš„ç¼“å†²åŒºï¼Œç¼“å†²åŒºå¤§å°
 		GetModuleFileNameA(hInstance, dlldir, 512);
 		hook_log << "dll path: " << dlldir << endl;
-		// É¾³ıÎÄ¼şÃû£¬Ö»±£ÁôÂ·¾¶
+		// åˆ é™¤æ–‡ä»¶åï¼Œåªä¿ç•™è·¯å¾„
 		for (size_t i = strlen(dlldir); i > 0; i--) { if (dlldir[i] == '\\') { dlldir[i + 1] = 0; break; } }
 		hook_log << "dll`s path: " << dlldir << endl;
 
-		// ´Ónvcuda.dllÖĞ»ñÈ¡cuLaunchKernelºÍcuModuleGetFunctionºÍcuGetProcAddressµÄµØÖ·
+		// ä»nvcuda.dllä¸­è·å–cuLaunchKernelå’ŒcuModuleGetFunctionå’ŒcuGetProcAddressçš„åœ°å€
 		cuLaunchKerneladdr = (cuLaunchKernelt)getLibraryProcAddress("nvcuda.dll", "cuLaunchKernel");
 		hook_log << "\nculaucnkernel addr " << cuLaunchKerneladdr << endl;
 		cuModuleGetFunctionaddr = (cuModuleGetFunctiont)getLibraryProcAddress("nvcuda.dll", "cuModuleGetFunction");
@@ -250,7 +255,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		}
 		hook_log << "cuGetProcAddress addr " << cuGetProcAddressaddr << endl;
 
-		// »ñÈ¡cudaLaunchKernelµÄµØÖ·
+		// è·å–cudaLaunchKernelçš„åœ°å€
 		try {
 			cudaLaunchKerneladdr = (cudaLaunchKernelt)getLibraryProcAddress("cudart64_110", "cudaLaunchKernel");
 		}
@@ -272,10 +277,10 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		hook_log << "CCCcudaLaunchKernel addr" << cudaLaunchKerneladdr << endl;
 
 		
-		// ³õÊ¼»¯MinHook
+		// åˆå§‹åŒ–MinHook
 		if (MH_Initialize() != MH_OK) hook_log << "initialize hook failed" << endl; else hook_log << "initialize hook sucess" << endl;
-		// ´´½¨¹³×Ó£¬¹³×¡cuLaunchKernelºÍcuModuleGetFunctionº¯Êı
-		// ²ÎÊı1£ºÒª¹³µÄº¯ÊıµØÖ·£¬²ÎÊı2£º¹³×Óº¯ÊıµØÖ·£¬²ÎÊı3£ºÓÃÓÚ±£´æÔ­º¯ÊıµØÖ·µÄÖ¸Õë
+		// åˆ›å»ºé’©å­ï¼Œé’©ä½cuLaunchKernelå’ŒcuModuleGetFunctionå‡½æ•°
+		// å‚æ•°1ï¼šè¦é’©çš„å‡½æ•°åœ°å€ï¼Œå‚æ•°2ï¼šé’©å­å‡½æ•°åœ°å€ï¼Œå‚æ•°3ï¼šç”¨äºä¿å­˜åŸå‡½æ•°åœ°å€çš„æŒ‡é’ˆ
 		if (MH_CreateHook((LPVOID)cuLaunchKerneladdr, hkcuLaunchKernel, (LPVOID*)&ocuLaunchKernel) != MH_OK) hook_log << "create cuLaunchKernel failed" << endl;
 		else hook_log << "\ncreate cuLaunchKernel success" << endl;
 		if (MH_CreateHook((LPVOID)cuModuleGetFunctionaddr, hkcuModuleGetFunction, (LPVOID*)&ocuModuleGetFunction) != MH_OK) hook_log << "create cuModuleGetFunction failed" << endl;
@@ -289,7 +294,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 		hook_log << "ocuGetProcAddress: " << *ocuGetProcAddress << endl;
 		hook_log << "ocudaLaunchKernel: " << *ocudaLaunchKernel << endl;
 
-		// ÆôÓÃ¹³×Ó£¬Ê¹¹³×ÓÉúĞ§£¬²ÎÊıÎªÒª¹³µÄº¯ÊıµØÖ·
+		// å¯ç”¨é’©å­ï¼Œä½¿é’©å­ç”Ÿæ•ˆï¼Œå‚æ•°ä¸ºè¦é’©çš„å‡½æ•°åœ°å€
 		if (MH_EnableHook((LPVOID)cuLaunchKerneladdr) != MH_OK) hook_log << "enable cuLaunchKernel failed" << endl;
 		else hook_log << "enable cuLaunchKernel success" << endl;
 		if (MH_EnableHook((LPVOID)cuModuleGetFunctionaddr) != MH_OK) hook_log << "enable cuModuleGetFunction failed" << endl;

@@ -18,7 +18,7 @@
 #include "cuda_runtime.h"
 #pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\lib\\x64\\nvml.lib")
 #pragma comment(lib, "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\lib\\x64\\cudart.lib")
-// #include "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.0\include\cuda.h"
+
 #define PF //  FPS; PF ; SOFT; CSPEED; NAIVE
 #define LOGDIR "D:\\CloudGaming\\Log2\\rdr_rendertime.csv"
 #define FENCEGAP 0

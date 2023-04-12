@@ -15,7 +15,7 @@
 #pragma comment( lib, "winmm" )
 #include <string>
 #include <queue>
-#define TEST1 // OFF; FULL; FPS; PF ; SOFT; CSPEED; NAIVE
+#define FULL // OFF; FULL; FPS; PF ; SOFT; CSPEED; NAIVE
 #define KERNELAVG1 "D:\\CloudGaming\\OfflineData\\kernel_avetime.txt"
 #define KERNELAVG2 "D:\\CloudGaming\\Log\\kernel_avetime.txt"
 #define TESTLOGDIR "D:\\CloudGaming\\Log\\kernel_test.txt"
@@ -54,6 +54,12 @@ namespace dx12
 		};
 	};
 
+	/**
+	 * @brief 好像只是为了获得D3D12的方法表，存在g_methodsTable中？
+	 * 
+	 * @param renderType 
+	 * @return Status::Enum 
+	 */
 	Status::Enum init(RenderType::Enum renderType);
 
 	RenderType::Enum getRenderType();
@@ -74,6 +80,7 @@ static uint64_t* g_methodsTable = NULL;
 static uint32_t* g_methodsTable = NULL;
 #endif
 
+// 总体来说，好像只是为了获得D3D12的方法表，存在g_methodsTable中？
 dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 {
 	if (_renderType != RenderType::None)
@@ -94,6 +101,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 			windowClass.lpszClassName = TEXT("dx12");
 			windowClass.hIconSm = NULL;
 
+			// 用于注册窗口类，注册成功后，才能使用CreateWindow函数创建窗口
 			::RegisterClassEx(&windowClass);
 
 			HWND window = ::CreateWindow(windowClass.lpszClassName, TEXT("DirectX Window"), WS_OVERLAPPEDWINDOW, 0, 0, 100, 100, NULL, NULL, windowClass.hInstance, NULL);
@@ -101,6 +109,8 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 
 			if (_renderType == RenderType::D3D12)
 			{
+				// 初始化DXGI和D3D12的DLL模块
+				// 如果没有找到DXGI或者D3D12的DLL模块，就销毁窗口和取消注册窗口类，返回ModuleNotFoundError错误
 				HMODULE libDXGI;
 				HMODULE libD3D12;
 				if ((libDXGI = ::GetModuleHandle(TEXT("dxgi.dll"))) == NULL || (libD3D12 = ::GetModuleHandle(TEXT("d3d12.dll"))) == NULL)
@@ -110,6 +120,8 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::ModuleNotFoundError;
 				}
 
+				// 用GetProcAddress找到CreateDXGIFactory函数，返回一个函数指针，如果返回NULL，说明找不到，直接返回；
+				// 用::DestroyWindow销毁窗口，用::UnregisterClass销毁注册的窗口类，返回未知错误。
 				void* CreateDXGIFactory;
 				if ((CreateDXGIFactory = ::GetProcAddress(libDXGI, "CreateDXGIFactory")) == NULL)
 				{
@@ -118,6 +130,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用CreateDXGIFactory函数创建IDXGIFactory对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				IDXGIFactory* factory;
 				if (((long(__stdcall*)(const IID&, void**))(CreateDXGIFactory))(__uuidof(IDXGIFactory), (void**)&factory) < 0)
 				{
@@ -126,6 +139,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用IDXGIFactory对象的EnumAdapters函数枚举适配器，返回一个指针，如果返回DXGI_ERROR_NOT_FOUND，说明枚举失败，直接返回；
 				IDXGIAdapter* adapter;
 				if (factory->EnumAdapters(0, &adapter) == DXGI_ERROR_NOT_FOUND)
 				{
@@ -134,6 +148,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用GetProcAddress找到D3D12CreateDevice函数，返回一个函数指针，如果返回NULL，说明找不到，直接返回；
 				void* D3D12CreateDevice;
 				if ((D3D12CreateDevice = ::GetProcAddress(libD3D12, "D3D12CreateDevice")) == NULL)
 				{
@@ -142,6 +157,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用D3D12CreateDevice函数创建ID3D12Device对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				ID3D12Device* device;
 				if (((long(__stdcall*)(IUnknown*, D3D_FEATURE_LEVEL, const IID&, void**))(D3D12CreateDevice))(adapter, D3D_FEATURE_LEVEL_11_0, __uuidof(ID3D12Device), (void**)&device) < 0) //why is D3D_FEATURE_LEVEL_12_0 wrong?
 				{
@@ -150,6 +166,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用ID3D12Device对象的CreateCommandQueue函数创建ID3D12CommandQueue对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				D3D12_COMMAND_QUEUE_DESC queueDesc;
 				queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
 				queueDesc.Priority = 0;
@@ -164,6 +181,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用ID3D12Device对象的CreateCommandAllocator函数创建ID3D12CommandAllocator对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				ID3D12CommandAllocator* commandAllocator;
 				if (device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, __uuidof(ID3D12CommandAllocator), (void**)&commandAllocator) < 0)
 				{
@@ -172,6 +190,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用ID3D12Device对象的CreateCommandList函数创建ID3D12GraphicsCommandList对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				ID3D12GraphicsCommandList* commandList;
 				if (device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, NULL, __uuidof(ID3D12GraphicsCommandList), (void**)&commandList) < 0)
 				{
@@ -180,6 +199,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 					return Status::UnknownError;
 				}
 
+				// 用ID3D12GraphicsCommandList对象的
 				DXGI_RATIONAL refreshRate;
 				refreshRate.Numerator = 60;
 				refreshRate.Denominator = 1;
@@ -206,6 +226,7 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 				swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 				swapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
+				// 用IDXGIFactory对象的CreateSwapChain函数创建IDXGISwapChain对象，返回一个指针，如果返回小于0，说明创建失败，直接返回；
 				IDXGISwapChain* swapChain;
 				if (factory->CreateSwapChain(commandQueue, &swapChainDesc, &swapChain) < 0)
 				{
@@ -215,6 +236,10 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 				}
 
 #if _M_X64
+				// 开辟g_methodsTable指针空间，大小为150个uint64_t
+				// 函数指针的大小为8个字节，150个uint64_t的大小为1200个字节
+				// 存放ID3D12Device对象的前44个函数指针，ID3D12CommandQueue对象的前19个函数指针，ID3D12CommandAllocator对象的前9个函数指针，ID3D12GraphicsCommandList对象的前60个函数指针，IDXGISwapChain对象的前18个函数指针
+				// 疑问：这个数量是怎么来的？是否会根据版本的不同而不同？
 				g_methodsTable = (uint64_t*)::calloc(150, sizeof(uint64_t));
 				memcpy(g_methodsTable, *(uint64_t**)device, 44 * sizeof(uint64_t));
 				memcpy(g_methodsTable + 44, *(uint64_t**)commandQueue, 19 * sizeof(uint64_t));
@@ -262,13 +287,14 @@ dx12::Status::Enum dx12::init(RenderType::Enum _renderType)
 }
 
 
-
+// 用于获取渲染类型
 dx12::RenderType::Enum dx12::getRenderType()
 {
 	return g_renderType;
 }
 
 #if defined _M_X64
+// 用于获取g_methodsTable指针
 uint64_t* dx12::getMethodsTable()
 {
 	return g_methodsTable;

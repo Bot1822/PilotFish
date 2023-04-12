@@ -2,6 +2,7 @@
 #include <map>
 #include <iostream>
 #include <process.h>
+#include <cuda.h>
 
 using namespace std;
 
@@ -56,6 +57,7 @@ void get_kernel_time(map<string, double>& kernel_list)
 
 CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void** kernelParams, void** extra)
 {
+	// q:cur_time 用到了吗?
 	double cur_time = 0.1;
 	bool notinmod = false;
 	if (kernel_time.find(f) != kernel_time.end())
@@ -113,6 +115,7 @@ CUresult CUDAAPI hkcuLaunchKernel(CUfunction f, unsigned int gridDimX, unsigned 
 	return ret;
 }
 //load offline data
+// 更新了kernel_function，kernel_num，kernel_time这仨map
 CUresult CUDAAPI hkcuModuleGetFunction(CUfunction* hfunc, CUmodule hmod, const char* name)
 {
 	string str(name);
@@ -170,7 +173,7 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD fdwReason, LPVOID)
 
 		if (hook_log)MessageBoxA(0, "DLL injected", "step 4", 3);
 		hook_log << "dll inject" << endl;
-		DisableThreadLibraryCalls(hInstance);
+		// DisableThreadLibraryCalls(hInstance);
 		GetModuleFileNameA(hInstance, dlldir, 512);
 		for (size_t i = strlen(dlldir); i > 0; i--) { if (dlldir[i] == '\\') { dlldir[i + 1] = 0; break; } }
 		cuLaunchKerneladdr = (cuLaunchKernelt)getLibraryProcAddress("nvcuda.dll", "cuLaunchKernel");
